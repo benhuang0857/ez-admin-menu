@@ -9,4 +9,4 @@
 - `role-based-admin-menu-editor.php` : 程式進入點
 - `/assets`     : js與css放置的位置
 - `/includes`   : 程式主要執行(服務)的位置
-- `/templates`  : 版型
+- `/templates`  : 程式的Html版型放置的位置
