@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Role-Based Admin Menu Editor
+ * Plugin Name: EZ Admin Menu
  * Description: 允許管理員自訂不同角色可見的 WordPress 管理選單
  * Version: 0.6
- * Author: Your Name
+ * Author: Ben Huang, Erica Hsu
  */
 
 if (!defined('ABSPATH')) {
