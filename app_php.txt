@@ -1,0 +1,294 @@
+<?php
+/**
+ * Plugin Name: Role-Based Admin Menu Editor
+ * Description: 允許管理員自訂不同角色可見的 WordPress 管理選單
+ * Version: 1.0
+ * Author: Your Name
+ */
+
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// 1. 新增 "編輯角色權限" 到 Admin Menu
+function rbame_add_admin_menu() {
+    add_menu_page(
+        '使用者權限設定',
+        '使用者權限設定',
+        'manage_options',
+        'role-menu-editor',
+        'rbame_render_admin_page',
+        'dashicons-admin-generic',
+        90
+    );
+}
+add_action('admin_menu', 'rbame_add_admin_menu');
+
+// 2. 取得所有角色
+function rbame_get_all_roles() {
+    global $wp_roles;
+    if (!isset($wp_roles)) {
+        $wp_roles = new WP_Roles();
+    }
+    return $wp_roles->roles;
+}
+
+// 3. 取得所有主要 Admin Menu 項目
+function rbame_get_admin_menus() {
+    global $menu;
+    $menu_items = [];
+    foreach ($menu as $item) {
+        if (!empty($item[0]) && !empty($item[2])) {
+            $menu_items[$item[2]] = strip_tags($item[0]);
+        }
+    }
+    return $menu_items;
+}
+
+// 4. 取得角色權限設定 (從資料庫)
+function rbame_get_role_permissions() {
+    return get_option('rbame_role_permissions', []);
+}
+
+function rbame_get_role_editables() {
+    return get_option('rbame_role_editables', []);
+}
+
+// 5. 儲存角色權限設定
+function rbame_save_role_permissions() {
+    if (!current_user_can('manage_options')) {
+        wp_die(__('你沒有權限存取此頁面'));
+    }
+
+    if (isset($_POST['rbame_save'])) {
+        check_admin_referer('rbame_save_permissions');
+
+        $current_user = wp_get_current_user();
+        $current_role = !empty($current_user->roles) ? $current_user->roles[0] : '';
+
+        // 取得現有資料
+        $existing_permissions = rbame_get_role_permissions();
+        $existing_editables = rbame_get_role_editables();
+
+        $permissions = $existing_permissions;
+        $editables = $existing_editables;
+
+        if (isset($_POST['permissions']) && is_array($_POST['permissions'])) {
+            $all_roles = rbame_get_all_roles();
+            $editable_roles = ($current_role === 'administrator') ? $all_roles : rbame_filter_roles_by_hierarchy($all_roles, $current_role);
+
+            foreach ($_POST['permissions'] as $menu_slug => $roles) {
+                if ($current_role === 'administrator') {
+                    // administrator 可以完全覆蓋權限
+                    $editables[$menu_slug] = isset($roles['editable']) && $roles['editable'] === '1';
+                    unset($roles['editable']);
+                    $permissions[$menu_slug] = array_keys($roles);
+                } else {
+                    // 非 administrator 只更新他們能編輯的角色，保留其他角色
+                    $submitted_roles = array_keys($roles);
+                    $current_permissions = isset($permissions[$menu_slug]) ? $permissions[$menu_slug] : [];
+                    
+                    // 保留不在 editable_roles 中的現有權限（例如 administrator）
+                    $updated_permissions = array_filter($current_permissions, function($role) use ($editable_roles) {
+                        return !array_key_exists($role, $editable_roles);
+                    });
+                    
+                    // 合併提交的角色
+                    $permissions[$menu_slug] = array_unique(array_merge($updated_permissions, $submitted_roles));
+                }
+            }
+
+            update_option('rbame_role_permissions', $permissions);
+            if ($current_role === 'administrator' && !empty($editables)) {
+                update_option('rbame_role_editables', $editables);
+            }
+        } else {
+            var_dump($_POST['permissions']);
+            wp_die('permissions not set or not an array');
+        }
+
+        wp_redirect(admin_url('admin.php?page=role-menu-editor&updated=true'));
+        exit;
+    }
+}
+add_action('admin_post_rbame_save_permissions', 'rbame_save_role_permissions');
+
+// 6. 過濾角色層級
+function rbame_filter_roles_by_hierarchy($all_roles, $current_role) {
+    $editable_roles = get_editable_roles();
+    $role_keys = array_keys($editable_roles);
+
+    if ($current_role === 'administrator') {
+        return $all_roles;
+    }
+
+    $current_role_index = array_search($current_role, $role_keys, true);
+    if ($current_role_index === false) {
+        return [];
+    }
+
+    $filtered_roles = [];
+    for ($i = $current_role_index + 1; $i < count($role_keys); $i++) {
+        $role_key = $role_keys[$i];
+        if (isset($all_roles[$role_key])) {
+            $filtered_roles[$role_key] = $all_roles[$role_key];
+        }
+    }
+    return $filtered_roles;
+}
+
+// 7. 渲染管理介面
+function rbame_render_admin_page() {
+    $all_roles = rbame_get_all_roles();
+    $menus = rbame_get_admin_menus();
+    $permissions = rbame_get_role_permissions();
+    $editables = rbame_get_role_editables();
+
+    $current_user = wp_get_current_user();
+    $current_role = !empty($current_user->roles) ? $current_user->roles[0] : '';
+
+    if ($current_role === 'administrator') {
+        $roles = $all_roles;
+    } else {
+        $roles = rbame_filter_roles_by_hierarchy($all_roles, $current_role);
+    }
+
+    ?>
+    <div class="wrap">
+        <h1>編輯角色權限</h1>
+
+        <?php if (isset($_GET['updated'])) : ?>
+            <div class="updated notice is-dismissible"><p>權限已更新！</p></div>
+        <?php endif; ?>
+
+        <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+            <?php wp_nonce_field('rbame_save_permissions'); ?>
+            <input type="hidden" name="action" value="rbame_save_permissions">
+
+            <table class="widefat fixed striped">
+                <thead>
+                    <tr>
+                        <th>選單名稱</th>
+                        <?php if ($current_role === 'administrator') : ?>
+                            <th>不可修改</th>
+                            <th>全選</th>
+                        <?php endif; ?>
+                        <?php foreach ($roles as $role_key => $role_info) : ?>
+                            <th><?php echo esc_html($role_info['name']); ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($menus as $menu_slug => $menu_name) : ?>
+                        <?php 
+                            $is_all_checked = true;
+                            foreach ($roles as $role_key => $role_info) {
+                                if (!isset($permissions[$menu_slug]) || !in_array($role_key, $permissions[$menu_slug])) {
+                                    $is_all_checked = false;
+                                    break;
+                                }
+                            }
+                            $is_editable = isset($editables[$menu_slug]) && $editables[$menu_slug] === true;
+                        ?>
+                        <?php if ($current_role === 'administrator' || in_array('administrator', $permissions[$menu_slug] ?? [])) : ?>
+                            <tr>
+                                <td><?php echo esc_html($menu_name); ?></td>
+
+                                <?php if ($current_role === 'administrator') : ?>
+                                    <td>
+                                        <input type="checkbox" class="editable-checkbox"
+                                            data-menu="<?php echo esc_attr($menu_slug); ?>"
+                                            name="permissions[<?php echo esc_attr($menu_slug); ?>][editable]"
+                                            value="1" <?php echo $is_editable ? 'checked' : ''; ?>>
+                                    </td>
+                                    <td>
+                                        <input type="checkbox" class="select-all" data-menu="<?php echo esc_attr($menu_slug); ?>" 
+                                               <?php echo $is_all_checked ? 'checked' : ''; ?>>
+                                    </td>
+                                <?php endif; ?>
+
+                                <?php foreach ($roles as $role_key => $role_info) : ?>
+                                    <td>
+                                        <input type="checkbox" class="menu-permission"
+                                            data-menu="<?php echo esc_attr($menu_slug); ?>" 
+                                            name="permissions[<?php echo esc_attr($menu_slug); ?>][<?php echo esc_attr($role_key); ?>]"
+                                            value="1" 
+                                            <?php echo (isset($permissions[$menu_slug]) && in_array($role_key, $permissions[$menu_slug])) ? 'checked' : ''; ?>
+                                            <?php echo ($current_role !== 'administrator' && $is_editable) ? 'disabled' : ''; ?>>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+
+            <p class="submit">
+                <button type="submit" class="button button-primary" name="rbame_save">儲存變更</button>
+            </p>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.select-all').forEach(function(selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    let menuSlug = this.getAttribute('data-menu');
+                    let checkboxes = document.querySelectorAll('input.menu-permission[data-menu="' + menuSlug + '"]');
+                    checkboxes.forEach(function(checkbox) {
+                        checkbox.checked = selectAllCheckbox.checked;
+                    });
+                });
+            });
+
+            document.querySelectorAll('.menu-permission').forEach(function(checkbox) {
+                checkbox.addEventListener('change', function() {
+                    let menuSlug = this.getAttribute('data-menu');
+                    let allCheckboxes = document.querySelectorAll('input.menu-permission[data-menu="' + menuSlug + '"]');
+                    let selectAllCheckbox = document.querySelector('input.select-all[data-menu="' + menuSlug + '"]');
+                    if (selectAllCheckbox) {
+                        let allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+                        selectAllCheckbox.checked = allChecked;
+                    }
+                });
+            });
+        });
+    </script>
+    <?php
+}
+
+// 8. 過濾選單
+function rbame_filter_admin_menu() {
+    $user = wp_get_current_user();
+    if (empty($user->roles)) {
+        return;
+    }
+
+    $role = $user->roles[0];
+    $permissions = rbame_get_role_permissions();
+
+    $admin_permissions = [];
+    foreach ($permissions as $menu_slug => $roles) {
+        if (in_array('administrator', $roles, true)) {
+            $admin_permissions[] = $menu_slug;
+        }
+    }
+
+    global $menu;
+    foreach ($menu as $index => $item) {
+        if (empty($item[2])) {
+            continue;
+        }
+
+        $menu_slug = $item[2];
+        if (!in_array($menu_slug, $admin_permissions) && $role !== 'administrator') {
+            remove_menu_page($menu_slug);
+            continue;
+        }
+
+        if (!in_array($role, $permissions[$menu_slug] ?? []) && $role !== 'administrator') {
+            remove_menu_page($menu_slug);
+        }
+    }
+}
+add_action('admin_menu', 'rbame_filter_admin_menu', 999);
