@@ -2,7 +2,7 @@
 /**
  * Plugin Name: EZ Admin Menu
  * Description: 允許管理員自訂不同角色可見的 WordPress 管理選單
- * Version: 0.6
+ * Version: 0.7
  * Author: Ben Huang, Erica Hsu
  */
 
