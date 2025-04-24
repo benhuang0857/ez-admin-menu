@@ -3,10 +3,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class RBAME_Menu_Manager {
+class EZADM_MENU_Menu_Manager {
     private $core;
 
-    public function __construct(RBAME_Core $core) {
+    public function __construct(EZADM_MENU_Core $core) {
         $this->core = $core;
     }
 

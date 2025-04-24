@@ -3,10 +3,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class RBAME_Admin {
+class EZADM_MENU_Admin {
     private $core;
 
-    public function __construct(RBAME_Core $core) {
+    public function __construct(EZADM_MENU_Core $core) {
         $this->core = $core;
         add_action('wp_ajax_update_menu_order', [$this, 'update_menu_order']);
         add_action('admin_menu', [$this, 'apply_menu_order'], 999); // 優先級設高一點，確保在選單生成後執行

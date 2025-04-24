@@ -1,11 +1,32 @@
 <?php
-if (!defined('ABSPATH')) {
-    exit;
-}
+if (!defined('ABSPATH')) exit;
+/**
+ * Class EZADM_MENU_Core
+ *
+ * Provide important function for other class call
+ */
+global $wp_roles;
 
-class RBAME_Core {
+class EZADM_MENU_Core
+{
+    public function __construct() {
+        add_action('admin_init', [$this, 'setup_role_capabilities']);
+    }
+
+    public function setup_role_capabilities() {
+        $this->set_manage_options_to_role('editor');
+    }
+
+    private function set_manage_options_to_role($role_name) {
+        $role = get_role($role_name);
+        if ($role && !$role->has_cap('manage_options')) {
+            $role->add_cap('manage_options');
+            return true;
+        }
+        return $role !== null;
+    }
+
     public function get_all_roles() {
-        global $wp_roles;
         if (!isset($wp_roles)) {
             $wp_roles = new WP_Roles();
         }
