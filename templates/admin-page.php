@@ -87,6 +87,6 @@
 </script>
 
 <?php
-wp_enqueue_script('sortable-js', 'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js', [], '1.0', true);
+// wp_enqueue_script('sortable-js', 'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js', [], '1.0', true);
 wp_enqueue_script('rbame-admin-js', plugin_dir_url(__FILE__) . '../assets/js/rbame-admin.js', [], '1.0', true);
 wp_enqueue_style('rbame-admin-css', plugin_dir_url(__FILE__) . '../assets/css/rbame-admin.css', [], '1.0');
